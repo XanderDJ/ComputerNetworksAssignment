@@ -9,10 +9,12 @@ public class ChatClient {
     private int DEFAULTPORT = 80;
 
     public static void main(String[] args){
-        if( args[0] == "GET"){
+        if( args[0].equals("GET")){
             System.out.println(args[1]);
             System.out.println(args[2]);
+
         }
+
 
     }
 
