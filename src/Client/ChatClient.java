@@ -5,7 +5,7 @@ import java.net.Socket;
 
 
 public class ChatClient {
-    private int DEFAULTPORT = 80;
+    private static int DEFAULTPORT = 80;
 
     public ChatClient(String command, String url, int port){
         connect(url, port);
@@ -17,12 +17,7 @@ public class ChatClient {
     }
 
     public ChatClient(String command, String url){
-        connect(url, DEFAULTPORT);
-
-        if (command.equals("GET") || command.equals("HEAD"))
-            fetch(command, url, DEFAULTPORT);
-        else if (command.equals("PUT") || command.equals("POST"))
-            place(command, url, DEFAULTPORT);
+        this(command, url, DEFAULTPORT);
     }
 
 
