@@ -7,7 +7,7 @@ import java.io.FileWriter;
 
 
 public class ChatClient {
-    private int DEFAULTPORT = 80;
+    private static int DEFAULTPORT = 80;
 
     public ChatClient(String command, String url, int port){
         connect(url, port);
@@ -16,6 +16,10 @@ public class ChatClient {
             fetch(command, url, port);
         else if (command.equals("PUT") || command.equals("POST"))
             place(command, url, port);
+    }
+
+    public ChatClient(String command,String url){
+        this(command,url, DEFAULTPORT);
     }
 
     public void fetch(String command, String url, int port){
