@@ -3,6 +3,8 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Scanner;
+import java.io.File;
+import java.io.FileWriter;
 
 
 public class ChatClient {
@@ -38,16 +40,21 @@ public class ChatClient {
             outputWtr.println("Host: "+dnsAdress+":"+String.valueOf(port));
             outputWtr.println("");
             outputWtr.flush();
+
             StringBuilder response = new StringBuilder();
             boolean endChunkNotGiven = true;
-            while(inputServer.hasNext() && endChunkNotGiven){
+            while(endChunkNotGiven && inputServer.hasNext()){
 
                 String nextLine = inputServer.nextLine();
-                response.append(nextLine + "\r\n");
-                if(response.toString().contains("0\r\n\r\n")){
+                if(nextLine.equals("0")){
                     endChunkNotGiven =false;
                 }
+                if(nextLine.matches("-?[0-9a-fA-F]+")){
+                    nextLine = "";
+                }
+                response.append(nextLine + "\r\n");
             }
+
 
 //            StringBuilder response = new StringBuilder();
 //            int contentLength = 1;
@@ -74,14 +81,15 @@ public class ChatClient {
 //                }
 //            }
 //            response.append(line);
-
-
-            System.out.print(response);
+            saveFiles(dnsAdress,location,response.toString(),".html");
+            //System.out.print(response);
 
         } catch (Exception e){
             System.out.println(e);
         }
     }
+    private int counter;
+
 
     public void place(String command, String host,String location, int port){
         try{
@@ -108,6 +116,22 @@ public class ChatClient {
         }catch (Exception e){
             System.out.println(e);
         }
+    }
+
+    public void saveFiles(String host, String location, String content,String type){
+        File dir = new File("webpages/" + host);
+        dir.mkdirs();
+        try {
+            File file = new File(dir, location.split(type,2)[0] + type);
+            file.createNewFile();
+            FileWriter writer = new FileWriter(file);
+            writer.append(content);
+            writer.flush();
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 
     public void connect(String url, int port){
