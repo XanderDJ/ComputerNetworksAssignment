@@ -2,6 +2,7 @@ package Client;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Scanner;
 
 
 public class ChatClient {
@@ -14,7 +15,7 @@ public class ChatClient {
         if (command.equals("GET") || command.equals("HEAD"))
             fetch(command, parsedURL[0], parsedURL[1], port);
         else if (command.equals("PUT") || command.equals("POST"))
-            place(command, url, port);
+            place(command, parsedURL[0], parsedURL[1], port);
     }
 
     public ChatClient(String command, String url){
@@ -22,41 +23,58 @@ public class ChatClient {
     }
 
     private String[] parseURL(String url){
+        if( url.contains("https://")){
+            url = url.substring(8);
+        }else if (url.contains("http://")){
+            url = url.substring(7);
+        }
         return url.split("/", 2);
     }
 
     public void fetch(String command, String dnsAdress, String location, int port){
         try {
+            Scanner inputServer = new Scanner(inFromServer);
             outputWtr.println(command+" /"+location+" HTTP/1.1");
             outputWtr.println("Host: "+dnsAdress+":"+String.valueOf(port));
             outputWtr.println("");
             outputWtr.flush();
-
             StringBuilder response = new StringBuilder();
-            int contentLength = 1;
-            Boolean readingContent = false;
-            StringBuilder line = new StringBuilder();
-            int currentChar;
-            while (contentLength > 0 && (currentChar = inFromServer.read()) != -1){
-                line.append(Character.toChars(currentChar));
+            boolean endChunkNotGiven = true;
+            while(inputServer.hasNext() && endChunkNotGiven){
 
-                if (readingContent){
-                    contentLength -= 1;
-                }
-
-                // De lijn is volledig
-                if (currentChar == '\n'){
-                    response.append(line);
-                    if (line.toString().contains("Content-Length:")){
-                        contentLength = Integer.valueOf(line.toString().trim().split(" ")[1]);
-                    } else if (line.toString().equals("\r\n")){
-                        readingContent = true;
-                    }
-                    line = new StringBuilder();
-
+                String nextLine = inputServer.nextLine();
+                response.append(nextLine + "\r\n");
+                if(response.toString().contains("0\r\n\r\n")){
+                    endChunkNotGiven =false;
                 }
             }
-            response.append(line);
+
+//            StringBuilder response = new StringBuilder();
+//            int contentLength = 1;
+//            Boolean readingContent = false;
+//            StringBuilder line = new StringBuilder();
+//            int currentChar;
+//            while (contentLength > 0 && (currentChar = inFromServer.read()) != -1){
+//                line.append(Character.toChars(currentChar));
+//
+//                if (readingContent){
+//                    contentLength -= 1;
+//                }
+//
+//                // De lijn is volledig
+//                if (currentChar == '\n'){
+//                    response.append(line);
+//                    if (line.toString().contains("Content-Length:")){
+//                        contentLength = Integer.valueOf(line.toString().trim().split(" ")[1]);
+//                    } else if (line.toString().equals("\r\n")){
+//                        readingContent = true;
+//                    }
+//                    line = new StringBuilder();
+//
+//                }
+//            }
+//            response.append(line);
+
 
             System.out.print(response);
 
@@ -65,8 +83,31 @@ public class ChatClient {
         }
     }
 
-    public void place(String command, String url, int port){
-        //TODO
+    public void place(String command, String host,String location, int port){
+        try{
+            // interative prompt from command line
+            Scanner inputScanner = new Scanner(System.in);
+            // prompt user to give command
+            System.out.println("Give the request for " + command + " command:");
+            Scanner inputServer = new Scanner(inFromServer);
+            String file = inputScanner.nextLine();
+            outputWtr.println(command + " /" + location + "/" + file + " /HTTP1.1");
+            outputWtr.println("Host: "+host+":"+String.valueOf(port));
+            outputWtr.println("");
+            outputWtr.flush();
+            String answer = "";
+            while(inputServer.hasNext()){
+                answer += inputServer.nextLine() + "\n";
+            }
+            System.out.println(answer);
+
+
+
+
+
+        }catch (Exception e){
+            System.out.println(e);
+        }
     }
 
     public void connect(String url, int port){
