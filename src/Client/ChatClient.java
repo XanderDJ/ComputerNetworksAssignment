@@ -43,16 +43,18 @@ public class ChatClient {
 
             StringBuilder response = new StringBuilder();
             boolean endChunkNotGiven = true;
-            while(endChunkNotGiven && inputServer.hasNext()){
+            boolean continueReading=true;
+            while(endChunkNotGiven && inputServer.hasNext() && continueReading){
 
                 String nextLine = inputServer.nextLine();
+                if( nextLine.contains("HTTP/1.1")) continueReading = handleResponseCode(nextLine);
                 if(nextLine.equals("0")){
                     endChunkNotGiven =false;
                 }
-                if(nextLine.matches("-?[0-9a-fA-F]+")){
-                    nextLine = "";
-                }
-                response.append(nextLine + "\r\n");
+                if(nextLine.matches("-?[0-9a-fA-F]+")){}
+                if( !continueReading)response.delete(0,response.length());
+                else{
+                response.append(nextLine + "\r\n");}
             }
 
 
@@ -82,6 +84,7 @@ public class ChatClient {
 //            }
 //            response.append(line);
             saveFiles(dnsAdress,location,response.toString(),".html");
+            System.out.print(response.toString());
             //System.out.print(response);
 
         } catch (Exception e){
@@ -144,6 +147,14 @@ public class ChatClient {
         } catch(Exception e){
             System.out.println(e);
         }
+    }
+
+    public boolean handleResponseCode(String lineWithResponse){
+        String responseCode = lineWithResponse.substring(9);
+        System.out.print(responseCode);
+        if( responseCode.contains("200")) return true;
+        return false;
+
     }
 
 
