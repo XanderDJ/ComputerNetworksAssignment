@@ -35,64 +35,99 @@ public class ChatClient {
 
     public void fetch(String command, String dnsAdress, String location, int port){
         try {
-            Scanner inputServer = new Scanner(inFromServer);
+            // --- Send request
             outputWtr.println(command+" /"+location+" HTTP/1.1");
             outputWtr.println("Host: "+dnsAdress+":"+String.valueOf(port));
             outputWtr.println("");
             outputWtr.flush();
 
-            StringBuilder response = new StringBuilder();
-            boolean endChunkNotGiven = true;
-            boolean continueReading=true;
-            while(endChunkNotGiven && inputServer.hasNext() && continueReading){
+            // --- Receive the header
+            StringBuilder header = new StringBuilder();
+            StringBuilder line = new StringBuilder();
+            int currentChar;
+            int contentLength = -1;
+            while ((currentChar = inFromServer.read()) != -1) {
+                line.append(Character.toChars(currentChar));
 
-                String nextLine = inputServer.nextLine();
-                if( nextLine.contains("HTTP/1.1")) continueReading = handleResponseCode(nextLine);
-                if(nextLine.equals("0")){
-                    endChunkNotGiven =false;
+                // De lijn is volledig
+                if (currentChar == '\n') {
+                    header.append(line);
+
+                    if (line.toString().contains("Content-Length:")) {
+                        contentLength = Integer.valueOf(line.toString().trim().split(" ")[1]);
+                    } else if (line.toString().equals("\r\n")) {
+                        break;
+                    }
+                    line = new StringBuilder();
                 }
-                if(nextLine.matches("-?[0-9a-fA-F]+")){}
-                if( !continueReading)response.delete(0,response.length());
-                else{
-                response.append(nextLine + "\r\n");}
             }
+            System.out.println(header);
+            StringBuilder content;
+            if  (contentLength >= 0){
+                content = readData(contentLength);
+            } else
+                content = readChunked();
 
-
-//            StringBuilder response = new StringBuilder();
-//            int contentLength = 1;
-//            Boolean readingContent = false;
-//            StringBuilder line = new StringBuilder();
-//            int currentChar;
-//            while (contentLength > 0 && (currentChar = inFromServer.read()) != -1){
-//                line.append(Character.toChars(currentChar));
-//
-//                if (readingContent){
-//                    contentLength -= 1;
-//                }
-//
-//                // De lijn is volledig
-//                if (currentChar == '\n'){
-//                    response.append(line);
-//                    if (line.toString().contains("Content-Length:")){
-//                        contentLength = Integer.valueOf(line.toString().trim().split(" ")[1]);
-//                    } else if (line.toString().equals("\r\n")){
-//                        readingContent = true;
-//                    }
-//                    line = new StringBuilder();
-//
-//                }
-//            }
-//            response.append(line);
-            saveFiles(dnsAdress,location,response.toString(),".html");
-            System.out.print(response.toString());
-            //System.out.print(response);
+            saveFiles(dnsAdress, location, content.toString(), ".html");
+            System.out.print(content);
 
         } catch (Exception e){
             System.out.println(e);
         }
     }
-    private int counter;
 
+    private StringBuilder readData(int length){
+        try {
+            StringBuilder response = new StringBuilder();
+            StringBuilder line = new StringBuilder();
+            int currentChar;
+
+            while (length > 0 && (currentChar = inFromServer.read()) != -1) {
+                line.append(Character.toChars(currentChar));
+
+                // De lijn is volledig
+                if (currentChar == '\n') {
+                    response.append(line);
+                    line = new StringBuilder();
+                }
+                length -= 1;
+            }
+            // Add the last line
+            response.append(line);
+
+            return response;
+        } catch (IOException e){
+            System.out.println(e);
+        }
+
+        return new StringBuilder();
+    }
+
+    private StringBuilder readChunked(){
+        try {
+            StringBuilder response = new StringBuilder();
+            StringBuilder line = new StringBuilder();
+            int currentChar;
+            boolean ignoreNewline = false;
+            while ((currentChar = inFromServer.read()) != '0' && currentChar != -1) {
+                if (currentChar == '\n'){
+                    if (!(ignoreNewline)) {
+                        response.append(readData(Integer.valueOf(line.toString().trim(), 16)));
+                        line = new StringBuilder();
+                        ignoreNewline = true;
+                        continue;
+                    } else
+                        ignoreNewline = false;
+                }
+                line.append(Character.toChars(currentChar));
+            }
+
+            return response;
+        } catch (IOException e){
+            System.out.println(e);
+        }
+        return new StringBuilder();
+    }
 
     public void place(String command, String host,String location, int port){
         try{
