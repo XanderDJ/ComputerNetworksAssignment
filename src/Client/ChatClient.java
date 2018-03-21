@@ -136,35 +136,64 @@ public class ChatClient {
             // interative prompt from command line
             Scanner inputScanner = new Scanner(System.in);
             // prompt user to give command
-            System.out.println("Give the request for " + command + " command:");
-            Scanner inputServer = new Scanner(inFromServer);
-            String file = inputScanner.nextLine();
-            outputWtr.println(command + " /" + location + "/" + file + " /HTTP1.1");
+            System.out.println("Give the request for " + command + " command, close the prompt by typing \"exit\":");
+
+            // Retreive the text to send in the PUT request:
+            StringBuilder file = new StringBuilder();
+            while (inputScanner.hasNextLine()){
+                String line = inputScanner.nextLine();
+
+                if (line.equals("exit")) {
+                    inputScanner.close();
+                    break;
+                }
+                file.append(line);
+                file.append("\r\n");
+            }
+
+            // -- Find out the type of this document
+            String type = "text/plain";
+            String splittedLocation[] = location.split("\\.");
+            String fileType = splittedLocation[splittedLocation.length-1];
+            if (fileType.equals("html"))
+                type = "text/html";
+            else if (fileType.equals("jpeg") || fileType.equals("jpg"))
+                type = "image/jpeg";
+            else if (fileType.equals("png"))
+                type = "image/png";
+
+            // ---Send the request
+            outputWtr.println(command + " /" + location + " /HTTP1.1");
             outputWtr.println("Host: "+host+":"+String.valueOf(port));
+            outputWtr.println("Content-type: text/html");
+            outputWtr.println("Content-length: "+file.length());
             outputWtr.println("");
+            outputWtr.print(file);
             outputWtr.flush();
-            String answer = "";
-            while(inputServer.hasNext()){
-                answer += inputServer.nextLine() + "\n";
+
+            StringBuilder answer = new StringBuilder();
+            String line;
+            while((line = inFromServer.readLine()) != null){
+                answer.append(line);
+                answer.append("\r\n");
+                if (line.length() == 0)
+                    break;
             }
             System.out.println(answer);
-
-
-
-
 
         }catch (Exception e){
             System.out.println(e);
         }
     }
 
-    public void saveFiles(String host, String location, String content,String type){
+
+
+    public void saveFiles(String host, String fileName, String content,String type){
         File dir = new File("webpages/" + host);
         dir.mkdirs();
         try {
-            File file = new File(dir, location.split(type,2)[0] + type);
-            file.createNewFile();
-            FileWriter writer = new FileWriter(file);
+            File file = new File(dir, fileName);
+            FileWriter writer = new FileWriter(file, false);
             writer.append(content);
             writer.flush();
             writer.close();
@@ -178,7 +207,7 @@ public class ChatClient {
         try{
             this.connection = new Socket(url, port);
             this.outputWtr = new PrintWriter(connection.getOutputStream());
-            this.inFromServer = new InputStreamReader(connection.getInputStream());
+            this.inFromServer = new BufferedReader(new InputStreamReader(connection.getInputStream()));
 
             System.out.println("Connected to: "+url+"\n");
         } catch(Exception e){
@@ -189,5 +218,5 @@ public class ChatClient {
 
     private Socket connection;
     private PrintWriter outputWtr;
-    private InputStreamReader inFromServer;
+    private BufferedReader inFromServer;
 }
