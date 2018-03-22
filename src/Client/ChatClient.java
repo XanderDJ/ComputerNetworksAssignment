@@ -106,13 +106,15 @@ public class ChatClient {
 
             // --- Receive the header
             //StringBuilder header = new StringBuilder();
-            String line;
+            String line,contentType = ".html" ;
             int contentLength = -1;
             while ((line = inFromServer.readLine()) != null) {
-                System.out.println(line);
+                //System.out.println(line);
                 //header.append(line);
                 //header.append("\r\n");
-
+                if(line.contains("Content-Type: ")){
+                    contentType  = line.contains(";")? line.split("/")[1].substring(0,4) :"." + line.split("/")[1];
+                }
                 if (line.contains("Content-Length:")) {
                     contentLength = Integer.valueOf(line.trim().split(" ")[1]);
                 }
@@ -128,9 +130,8 @@ public class ChatClient {
                 } else
                     content = readChunked();
 
-
-                saveFiles(dnsAdress, fileName.split("\\?", 2)[0], content, ".html");
-                System.out.print(content);
+                saveFiles(dnsAdress, fileName, content, contentType);
+               //System.out.print(content);
             }
         } catch (Exception e){
             System.out.println(e);
@@ -151,9 +152,8 @@ public class ChatClient {
     private String readData(int length) {
         try {
             char[] text = new char[length];
-
             int i = inFromServer.read(text, 0, length);
-
+            //System.out.println(text);
             return new String(text);
 
         } catch (IOException e) {
@@ -180,9 +180,13 @@ public class ChatClient {
             while ((lengthStr = inFromServer.readLine()) != null && !lengthStr.equals("0")){
                 if (lengthStr.length() == 0)
                     continue;
-                response.append(readData(Integer.valueOf(lengthStr.trim(), 16)));
+                System.out.println(lengthStr);
+                if(lengthStr.matches("-?[0-9a-fA-F]+"))
+                response.append(readData(Integer.valueOf(lengthStr, 16) ));
+                else{
+                    response.append(lengthStr);
+                }
             }
-
             return response.toString();
         } catch (IOException e){
             System.out.println(e);
@@ -232,7 +236,7 @@ public class ChatClient {
             // ---Send the request
             outputWtr.println(command + " /" + location + " /HTTP1.1");
             outputWtr.println("Host: "+host+":"+String.valueOf(port));
-            outputWtr.println("Content-type: text/html");
+            outputWtr.println("Content-type: "+ type);
             outputWtr.println("Content-length: "+file.length());
             outputWtr.println("");
             outputWtr.print(file);
@@ -256,10 +260,17 @@ public class ChatClient {
 
 
     public void saveFiles(String host, String fileName, String content,String type){
-        File dir = new File("webpages/" + host);
+        String[] array = fileName.split("/");
+        String path = "webpages/"+host;
+        for(int i = 0; i <array.length-1;i++){
+            path += "/"+ array[i];
+        }
+        System.out.println(path);
+        File dir = new File(path);
         dir.mkdirs();
+        System.out.println();
         try {
-            File file = new File(dir, fileName);
+            File file = new File(dir, array[array.length-1].split("\\?")[0]);
             file.createNewFile();
             FileWriter writer = new FileWriter(file);
             writer.append(content);
