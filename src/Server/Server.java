@@ -28,9 +28,7 @@ public class Server {
         try {
             while(isActive){
                 Socket user = connection.accept();
-
                 RequestHandler handler = new RequestHandler(user);
-
                 Thread thread = new Thread(handler);
                 thread.start();
             }
