@@ -319,14 +319,14 @@ public class ChatClient {
     }
 
     /**
-     * Saves the given "content" locally on this device under the name "path" in the webpages/host map.
-     * This method will create this directory if non-existent.
+     * Saves the given "content" locally on this device under the name "path" in the webpages/Client/hostName
+     * map. This method will create this directory if non-existent.
      *
      * @param content   The content of the saved file.
      * @param type      The type of the file.
      */
-    private void saveFiles(String content, String type){
-        StringBuilder filePath = new StringBuilder("webpages/");
+    public void saveFiles(String content, String type){
+        StringBuilder filePath = new StringBuilder("webpages/Client/");
         filePath.append(connectionURL.getHost());
 
         String[] array = connectionURL.getPath().split("/");
@@ -341,7 +341,7 @@ public class ChatClient {
         File dir = new File(filePath.toString());
         dir.mkdirs();
         try {
-            File file = new File(dir, array[array.length-1].split("\\.")[0]+"."+type);
+            File file = new File(dir, array[array.length-1].split("\\.")[0]+type);
             file.createNewFile();
             FileWriter writer = new FileWriter(file);
             writer.append(content);
@@ -351,10 +351,6 @@ public class ChatClient {
             e.printStackTrace();
         }
 
-    }
-
-    private File getFileLocation(){
-        return null;
     }
 
 

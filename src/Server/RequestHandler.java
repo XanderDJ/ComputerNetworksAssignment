@@ -3,10 +3,13 @@ package Server;
 import java.io.*;
 import java.net.Socket;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+
 
 /**
  * This class represents a universal handler that is used by the server. Each time a connection is
@@ -36,7 +39,7 @@ public class RequestHandler implements Runnable {
             this.inFromClient = new BufferedReader(new InputStreamReader(connection.getInputStream()));
             this.outputWtr = new PrintWriter(connection.getOutputStream());
         } catch (IOException e){
-            System.out.println(e);
+            e.printStackTrace();
         }
     }
 
@@ -82,6 +85,11 @@ public class RequestHandler implements Runnable {
                     break;
                 }
 
+                if (requestOptions.get("Host:") == null) {
+                    respond("HTTP/1.1 400 Bad request\r\n");
+                }
+
+
             System.out.println(request.toString());
             // --Call the proper method
             switch (method) {
@@ -103,59 +111,84 @@ public class RequestHandler implements Runnable {
                 connection.close();
 
         } catch (IOException e){
-            System.out.println(e);
+            e.printStackTrace();
         }
     }
 
-    public void get(String file, Map<String,String> options){
-        boolean continueOutputting = head(file, options);
+    public void get(String path, Map<String,String> options){
+        boolean continueOutputting = head(path, options);
         if(!continueOutputting){
             return;
         }
-        File newFile = new File(file);
-        outputWtr.print(newFile);
-        outputWtr.print("");
-        outputWtr.flush();
 
+        try {
+            File newFile = new File("webpages/Server/localhost"+path);
+            BufferedReader fileReader = new BufferedReader(new FileReader(newFile));
+
+            String line;
+            while ((line = fileReader.readLine()) != null){
+                outputWtr.write(line);
+                outputWtr.write("\r\n");
+            }
+            fileReader.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+        }
     }
 
     public boolean head(String file, Map<String,String> options){
         //get the file
-        File newFile = new File(file);
+        File newFile = new File("webpages/Server/localhost"+file);
         //build response
         StringBuilder response = new StringBuilder();
 
+        DateTimeFormatter formatter = DateTimeFormatter.RFC_1123_DATE_TIME.withZone(ZoneId.of("GMT"));
+        DateTimeFormatter formatter2 = DateTimeFormatter.ISO_INSTANT;
+
         //check if it exists
         boolean exists = newFile.exists();
-        long lastModified = newFile.lastModified();
-        SimpleDateFormat format = new SimpleDateFormat();
-        String date = format.format(lastModified);
-        long time = System.currentTimeMillis();
+        boolean condition = false;
+        if (options.get("if-modified-since:") != null && exists){
+            ZonedDateTime date = ZonedDateTime.parse(options.get("if-modified-since:"), formatter);
+            long ifModifiedsince = Instant.parse(date.format(formatter2)).toEpochMilli();
+            long lastModified = newFile.lastModified();
+
+            condition = lastModified < ifModifiedsince;
+        }
+
+        //String date = format.format(lastModified);
+        Instant instTime = Instant.ofEpochMilli(newFile.lastModified());
+        String lastModified = formatter.format(instTime);
+
         if(!exists){
-            response.append("HTTP/1.1 404 Not Found");
-            response.append("Lastmodified: " + date+ "\r\n");
+            response.append("HTTP/1.1 404 Not Found\r\n");
+            response.append("Lastmodified: ");
+            response.append(lastModified);
+            response.append("\r\n");
 
             return false;
         }
-        else if(!options.containsKey("host :")){
-            response.append("HTTP/1.1 400 Bad Request");
-            response.append("Lastmodified: " + date+ "\r\n");
-
-            return false;
-        }
-        else if( time > lastModified){
-            response.append("HTTP/1.1 304 Not Modified");
-            response.append("Lastmodified: " + date+ "\r\n");
+        else if (condition){
+            response.append("HTTP/1.1 304 Not Modified\r\n");
+            response.append("Lastmodified: ");
+            response.append(lastModified);
+            response.append("\r\n");
             respond(response.toString());
             return false;
             }
         else{
             response.append("HTTP/1.1 200 OK\r\n");
-            response.append("Lastmodified: " + date+ "\r\n");
-            response.append("Expires: -1");
-            response.append("Content-Type: " +  (file.split(".")[1].equals("html") ? "text/html" : "image/png") );
-            response.append("Content-length: " + newFile.length() + "\r\n");
-            response.append("Server: localhost");
+            response.append("Lastmodified: ");
+            response.append(lastModified);
+            response.append("\r\n");
+            response.append("Expires: -1\r\n");
+            response.append("Content-Type: ");
+            response.append((file.split("\\.")[1].equals("html") ? "text/html\r\n" : "image/png\r\n") );
+            response.append("Content-Length: ");
+            response.append(newFile.length());
+            response.append("\r\n");
+            response.append("Server: localhost\r\n");
             respond(response.toString());
             return true;
         }
@@ -183,7 +216,7 @@ public class RequestHandler implements Runnable {
      */
     public void place(String file, Map<String,String> options, boolean append){
         // Create new directory for the localhost if it doesnt exist yet
-        File dir = new File("webpages/localhost");
+        File dir = new File("webpages/Server/localhost");
         dir.mkdirs();
         try {
             // -- Retreive the text to be written
@@ -209,7 +242,7 @@ public class RequestHandler implements Runnable {
             response.append("\r\n");
             respond(response.toString());
         } catch (IOException e){
-            System.out.println(e);
+            e.printStackTrace();
         }
     }
 
@@ -226,7 +259,7 @@ public class RequestHandler implements Runnable {
             int i = inFromClient.read(text, 0, contentLength);
             return new String(text);
         } catch (IOException e) {
-            System.out.println(e);
+            e.printStackTrace();
         }
         return "";
     }
@@ -238,7 +271,7 @@ public class RequestHandler implements Runnable {
      * @param response  The response to be send.
      */
     private void respond(String response){
-        ZonedDateTime date = ZonedDateTime.now();
+        ZonedDateTime date = ZonedDateTime.now(ZoneId.of("GMT"));
         DateTimeFormatter format = DateTimeFormatter.RFC_1123_DATE_TIME;
         String formattedDate = date.format(format);
         outputWtr.write(response);
