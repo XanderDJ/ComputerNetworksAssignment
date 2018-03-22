@@ -1,11 +1,19 @@
 package Client;
 
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.Socket;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Scanner;
 import java.io.File;
 import java.io.FileWriter;
@@ -276,14 +284,38 @@ public class ChatClient {
         }
     }
 
-    public String imageGetter(InputStream input){
-        try {
-            BufferedImage image = ImageIO.read(input);
-            return image.toString();
-        } catch (IOException e) {
-            e.printStackTrace();
+    private void imageGetter(String url) throws IOException {
+        OutputStream outputStream = connection.getOutputStream();
+        PrintWriter outputWriter = new PrintWriter(outputStream);
+        outputWriter.println("GET " + url + "HTTP/1.1");
+        outputWriter.println("Host: " + connectionURL.getHost() + ":" + connectionURL.getPort());
+        outputWriter.println("");
+        outputWriter.flush();
+        // Initialize the streams.
+        final FileOutputStream fileOutputStream = new FileOutputStream("C:\\Users\\Xander\\IdeaProjects\\ComputerNetworksAssignment\\webpages\\www.google.be\\images\\branding\\googlelogo\\1x\\googlelogo_white_background_color_272x92dp..png");
+        final InputStream inputStream = connection.getInputStream();
+        boolean headerRead=false;
+        String string = "",line = "";
+        int contentLength=0;
+        while(!headerRead){
+            char nextChar = (char) inputStream.read();
+            line += String.valueOf(nextChar);
+            if( line.contains("\r\n")){
+                string += line;
+                if(line.contains("Content-Length:")){
+                    contentLength = Integer.valueOf(line.trim().split(" ")[1]);
+                }
+                line ="";
+            }
+            if(string.contains("\r\n\r\n")){
+                headerRead = true;
+            }
         }
-        return "";
+        byte[] bytes =new byte[contentLength];
+        inputStream.read(bytes);
+        fileOutputStream.write(bytes, 0, contentLength);
+        inputStream.close();
+        fileOutputStream.close();
     }
 
     /**
@@ -293,7 +325,7 @@ public class ChatClient {
      * @param content   The content of the saved file.
      * @param type      The type of the file.
      */
-    public void saveFiles(String content, String type){
+    private void saveFiles(String content, String type){
         StringBuilder filePath = new StringBuilder("webpages/");
         filePath.append(connectionURL.getHost());
 
@@ -321,6 +353,10 @@ public class ChatClient {
 
     }
 
+    private File getFileLocation(){
+        return null;
+    }
+
 
     /**
      * Establish a connection with a server with "url" as adress using the given port.
@@ -340,6 +376,38 @@ public class ChatClient {
         } catch(Exception e){
             System.out.println(e);
         }
+    }
+
+
+
+    private List<String> getLinks(String url) throws IOException {
+        List<String> list=  new ArrayList<>();
+        Document doc = Jsoup.connect(url).get();
+        Elements links = doc.select("a[href]");
+        Elements media = doc.select("[src]");
+        Elements imports = doc.select("link[href]");
+        for(Element src:media){
+            if(src.tagName().equals("img")) {
+                String link = src.attr("abs:src");
+                list.add(link);
+            }
+        }
+        return list;
+    }
+
+    private void updateImageLinkInFile(File file, String oldLink, String newLink) throws IOException {
+        FileReader reader = new FileReader(file);
+        BufferedReader bufferedReader = new BufferedReader(reader);
+        Iterator<String> iterator = bufferedReader.lines().iterator();
+        String fileString= "";
+        while(iterator.hasNext()){
+            fileString += iterator.next() + "\r\n";
+        }
+        fileString = fileString.replace(oldLink,newLink);
+        FileWriter writer = new FileWriter(file);
+        writer.write(fileString);
+        writer.flush();
+        writer.close();
     }
 
     private URL connectionURL;
