@@ -1,5 +1,7 @@
 package Client;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.Socket;
 import java.util.Scanner;
@@ -109,7 +111,7 @@ public class ChatClient {
             String line,contentType = ".html" ;
             int contentLength = -1;
             while ((line = inFromServer.readLine()) != null) {
-                //System.out.println(line);
+                System.out.println(line);
                 //header.append(line);
                 //header.append("\r\n");
                 if(line.contains("Content-Type: ")){
@@ -122,6 +124,7 @@ public class ChatClient {
                     break;
                 }
             }
+
 
             if (command.equals("GET")) {
                 String content;
@@ -255,6 +258,17 @@ public class ChatClient {
         }catch (Exception e){
             System.out.println(e);
         }
+    }
+
+
+    public String imageGetter(InputStream input){
+        try {
+            BufferedImage image = ImageIO.read(input);
+            return image.toString();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return "";
     }
 
 

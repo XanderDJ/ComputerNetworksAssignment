@@ -2,6 +2,7 @@ package Server;
 
 import java.io.*;
 import java.net.Socket;
+import java.text.SimpleDateFormat;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -87,11 +88,58 @@ public class RequestHandler implements Runnable {
     }
 
     public void get(String file, Map<String,String> options){
-        //TODO
+        boolean continueOutputting = head(file, options);
+        if(!continueOutputting){
+            return;
+        }
+        File newFile = new File(file);
+        outputWtr.print(newFile);
+        outputWtr.print("");
+        outputWtr.flush();
+
     }
 
-    public void head(String file, Map<String,String> options){
-        //TODO
+    public boolean head(String file, Map<String,String> options){
+        //get the file
+        File newFile = new File(file);
+        //build response
+        StringBuilder response = new StringBuilder();
+
+        //check if it exists
+        boolean exists = newFile.exists();
+        long lastModified = newFile.lastModified();
+        SimpleDateFormat format = new SimpleDateFormat();
+        String date = format.format(lastModified);
+        long time = System.currentTimeMillis();
+        if(!exists){
+            response.append("HTTP/1.1 404 Not Found");
+            response.append("Lastmodified: " + date+ "\r\n");
+
+            return false;
+        }
+        else if(!options.containsKey("host :")){
+            response.append("HTTP/1.1 400 Bad Request");
+            response.append("Lastmodified: " + date+ "\r\n");
+
+            return false;
+        }
+        else if( time > lastModified){
+            response.append("HTTP/1.1 304 Not Modified");
+            response.append("Lastmodified: " + date+ "\r\n");
+            respond(response.toString());
+            return false;
+            }
+        else{
+            response.append("HTTP/1.1 200 OK\r\n");
+            response.append("Lastmodified: " + date+ "\r\n");
+            response.append("Expires: -1");
+            response.append("Content-Type: " +  (file.split(".")[1].equals("html") ? "text/html" : "image/png") );
+            response.append("Content-length: " + newFile.length() + "\r\n");
+            response.append("Server: localhost");
+            respond(response.toString());
+            return true;
+        }
+
     }
 
     public void place(String file, Map<String,String> options, boolean append){
@@ -129,11 +177,8 @@ public class RequestHandler implements Runnable {
     private String retreiveText(int contentLength) {
         try {
             char[] text = new char[contentLength];
-
             int i = inFromClient.read(text, 0, contentLength);
-
             return new String(text);
-
         } catch (IOException e) {
             System.out.println(e);
         }
