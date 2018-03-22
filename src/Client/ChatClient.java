@@ -3,7 +3,9 @@ package Client;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.net.MalformedURLException;
 import java.net.Socket;
+import java.net.URL;
 import java.util.Scanner;
 import java.io.File;
 import java.io.FileWriter;
@@ -37,13 +39,17 @@ public class ChatClient {
      * @param port      The port to be used.
      */
     public ChatClient(String command, String url, int port){
-        String[] parsedURL = parseURL(url);
-        connect(parsedURL[0], port);
+        try {
+            connectionURL = new URL(url);
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+        }
+        connect(port);
 
         if (command.equals("GET") || command.equals("HEAD"))
-            fetch(command, parsedURL[0], parsedURL[1], port);
+            fetch(command, port);
         else if (command.equals("PUT") || command.equals("POST"))
-            place(command, parsedURL[0], parsedURL[1], port);
+            place(command, port);
     }
 
     /**
@@ -94,17 +100,19 @@ public class ChatClient {
      *      - Retreive and print out the header-response of the server
      *
      * @param command   A String which has to be "GET" or "HEADER", depending on the http-request
-     * @param dnsAdress The host-adress where the File/Header has to be retreived.
-     * @param fileName  The name of the file that has to be retreived.
      * @param port      The port to use.
      */
-    public void fetch(String command, String dnsAdress, String fileName, int port){
+    public void fetch(String command, int port){
         try {
             // --- Send request
-            outputWtr.println(command+" /"+fileName+" HTTP/1.1");
-            outputWtr.println("Host: "+dnsAdress+":"+String.valueOf(port));
+            outputWtr.println(command+" "+ connectionURL.getFile()+ " HTTP/1.1");
+            outputWtr.println("Host: "+ connectionURL.getHost()+":"+String.valueOf(port));
             outputWtr.println("");
             outputWtr.flush();
+
+            System.out.println(command+" " +connectionURL.getFile()+" HTTP/1.1");
+            System.out.println("Host: "+ connectionURL.getHost()+":"+String.valueOf(port));
+            System.out.println("");
 
             // --- Receive the header
             //StringBuilder header = new StringBuilder();
@@ -114,17 +122,19 @@ public class ChatClient {
                 System.out.println(line);
                 //header.append(line);
                 //header.append("\r\n");
-                if(line.contains("Content-Type: ")){
+                line = line.toLowerCase();
+                if(line.contains("content-type: ")){
                     contentType  = line.contains(";")? line.split("/")[1].substring(0,4) :"." + line.split("/")[1];
                 }
-                if (line.contains("Content-Length:")) {
+                if (line.contains("content-length:")) {
                     contentLength = Integer.valueOf(line.trim().split(" ")[1]);
                 }
                  else if (line.length() == 0) {
                     break;
                 }
             }
-
+            if (contentLength == 0)
+                return;
 
             if (command.equals("GET")) {
                 String content;
@@ -133,11 +143,11 @@ public class ChatClient {
                 } else
                     content = readChunked();
 
-                saveFiles(dnsAdress, fileName, content, contentType);
-               //System.out.print(content);
+                saveFiles(content, contentType);
+               System.out.print(content);
             }
         } catch (Exception e){
-            System.out.println(e);
+            e.printStackTrace();
         }
     }
 
@@ -155,12 +165,13 @@ public class ChatClient {
     private String readData(int length) {
         try {
             char[] text = new char[length];
+
             int i = inFromServer.read(text, 0, length);
-            //System.out.println(text);
+
             return new String(text);
 
         } catch (IOException e) {
-            System.out.println(e);
+            e.printStackTrace();
         }
         return "";
     }
@@ -183,29 +194,35 @@ public class ChatClient {
             while ((lengthStr = inFromServer.readLine()) != null && !lengthStr.equals("0")){
                 if (lengthStr.length() == 0)
                     continue;
-                System.out.println(lengthStr);
-                if(lengthStr.matches("-?[0-9a-fA-F]+"))
-                response.append(readData(Integer.valueOf(lengthStr, 16) ));
-                else{
+                //System.out.println(lengthStr);
+                //if(lengthStr.matches("-?[0-9a-fA-F]+"))
+                //response.append(readData(Integer.valueOf(lengthStr, 16) ));
+                //else{
                     response.append(lengthStr);
-                }
+                //}
             }
             return response.toString();
         } catch (IOException e){
-            System.out.println(e);
+            e.printStackTrace();
         }
         return "";
     }
 
 
     /**
+     * Represents the "PUT"- and "POST"-requests of the http-methods.
+     * This method will prompt the user for input to put or post on the server which is connected to this
+     * ChatClient using the given "port", under  file with "location" as the name on the server.
      *
-     * @param command
-     * @param host
-     * @param location
-     * @param port
+     * This method will:
+     *             - Promt the user for input to send with the PUT/POST request
+     *             - Send the http PUT/POST-request (depending on "command") to the server
+     *             - Receive and print the response of the server
+     * @param command   This String can either be "PUT" or "POST" depending on which http-method the user
+     *                  wants to use.
+     * @param port      The port to use to reach the server.
      */
-    public void place(String command, String host,String location, int port){
+    public void place(String command, int port){
         try{
             // interative prompt from command line
             Scanner inputScanner = new Scanner(System.in);
@@ -227,18 +244,17 @@ public class ChatClient {
 
             // -- Find out the type of this document
             String type = "text/plain";
-            String splittedLocation[] = location.split("\\.");
-            String fileType = splittedLocation[splittedLocation.length-1];
-            if (fileType.equals("html"))
+            String location = connectionURL.getPath();
+            if (location.contains(".html"))
                 type = "text/html";
-            else if (fileType.equals("jpeg") || fileType.equals("jpg"))
+            else if (location.contains(".jpeg") || location.contains(".jpg"))
                 type = "image/jpeg";
-            else if (fileType.equals("png"))
+            else if (location.contains(".png"))
                 type = "image/png";
 
             // ---Send the request
-            outputWtr.println(command + " /" + location + " /HTTP1.1");
-            outputWtr.println("Host: "+host+":"+String.valueOf(port));
+            outputWtr.println(command + " /" + connectionURL.getFile() + " /HTTP1.1");
+            outputWtr.println("Host: "+connectionURL.getHost()+":"+String.valueOf(port));
             outputWtr.println("Content-type: "+ type);
             outputWtr.println("Content-length: "+file.length());
             outputWtr.println("");
@@ -260,7 +276,6 @@ public class ChatClient {
         }
     }
 
-
     public String imageGetter(InputStream input){
         try {
             BufferedImage image = ImageIO.read(input);
@@ -271,20 +286,30 @@ public class ChatClient {
         return "";
     }
 
+    /**
+     * Saves the given "content" locally on this device under the name "path" in the webpages/host map.
+     * This method will create this directory if non-existent.
+     *
+     * @param content   The content of the saved file.
+     * @param type      The type of the file.
+     */
+    public void saveFiles(String content, String type){
+        StringBuilder filePath = new StringBuilder("webpages/");
+        filePath.append(connectionURL.getHost());
 
-
-    public void saveFiles(String host, String fileName, String content,String type){
-        String[] array = fileName.split("/");
-        String path = "webpages/"+host;
-        for(int i = 0; i <array.length-1;i++){
-            path += "/"+ array[i];
+        String[] array = connectionURL.getPath().split("/");
+        for(int i = 0; i < array.length-1;i++){
+            filePath.append("/");
+            filePath.append(array[i]);
         }
-        System.out.println(path);
-        File dir = new File(path);
+        if (array.length == 0){
+            System.out.println("Error: Could not resolve a suitable name for the document to be saved.");
+            return;
+        }
+        File dir = new File(filePath.toString());
         dir.mkdirs();
-        System.out.println();
         try {
-            File file = new File(dir, array[array.length-1].split("\\?")[0]);
+            File file = new File(dir, array[array.length-1].split("\\.")[0]+"."+type);
             file.createNewFile();
             FileWriter writer = new FileWriter(file);
             writer.append(content);
@@ -296,19 +321,28 @@ public class ChatClient {
 
     }
 
-    public void connect(String url, int port){
+
+    /**
+     * Establish a connection with a server with "url" as adress using the given port.
+     *
+     * This method will initialize a socket and will create:
+     *              - A BufferedReader associated with the InputStream of this socket.
+     *              - A PrintWriter associated with the OutputStream of this socket.
+     * @param port  The port to use for the connection.
+     */
+    public void connect(int port){
         try{
-            this.connection = new Socket(url, port);
+            this.connection = new Socket(connectionURL.getHost(), port);
             this.outputWtr = new PrintWriter(connection.getOutputStream());
             this.inFromServer = new BufferedReader(new InputStreamReader(connection.getInputStream()));
 
-            System.out.println("Connected to: "+url+"\n");
+            System.out.println("Connected to: "+connectionURL.getHost()+"\n");
         } catch(Exception e){
             System.out.println(e);
         }
     }
 
-
+    private URL connectionURL;
     private Socket connection;
     private PrintWriter outputWtr;
     private BufferedReader inFromServer;
