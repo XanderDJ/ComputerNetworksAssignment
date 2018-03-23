@@ -168,11 +168,14 @@ public class ChatClient {
      * @return          A string read from the InputStream of the connection of this ChatClient.
      *                  OR an empty string if an exception occured.
      */
-    private String readData(int length,InputStream inputStream) {
+    private String readData(int contentLength,InputStream inputStream) {
         try {
-            byte[] text = new byte[length];
-            inputStream.read(text, 0, length);
-            return new String(text,Charset.defaultCharset());
+            byte[] bytes = new byte[contentLength];
+            for(int i = 0;i< contentLength;i++){
+                Integer in = inputStream.read();
+                bytes[i] = in.byteValue();
+            }
+            return new String(bytes,Charset.defaultCharset());
         } catch (IOException e) {
             e.printStackTrace();
         }
