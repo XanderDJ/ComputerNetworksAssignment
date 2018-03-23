@@ -130,7 +130,6 @@ public class ChatClient {
             outputWtr.println("Host: "+ connectionURL.getHost()+":"+String.valueOf(port));
             outputWtr.println("");
             outputWtr.flush();
-            InputStream inputStream = connection.getInputStream();
 
             System.out.println(command+" " +connectionURL.getFile()+" HTTP/1.1");
             System.out.println("Host: "+ connectionURL.getHost()+":"+String.valueOf(port));
@@ -149,7 +148,7 @@ public class ChatClient {
                 saveFiles(content, contentType);
                 List<String> imageURLs = getLinks();
                 for(String URL: imageURLs){
-                    getImage(URL);
+                    getImage(URL,inputStream);
                 }
                 System.out.print(content);
             }
@@ -274,7 +273,6 @@ public class ChatClient {
             outputWtr.println("");
             outputWtr.print(file);
             outputWtr.flush();
-            InputStream inputStream = connection.getInputStream();
             head(inputStream);
 
         }catch (Exception e){
@@ -282,7 +280,13 @@ public class ChatClient {
         }
     }
 
-    private void getImage(String url) throws IOException {
+    /**
+     * Downloads an image at the given url and places it in the right folder
+     * @param url
+     * @param inputStream
+     * @throws IOException
+     */
+    private void getImage(String url,InputStream inputStream) throws IOException {
         this.connectionURL = new URL(url);
         outputWtr.println("GET " + connectionURL.getPath() + " HTTP/1.1");
         outputWtr.println("Host: " + connectionURL.getHost() + ":" + 80);
@@ -291,12 +295,13 @@ public class ChatClient {
         System.out.println("GET " + connectionURL.getPath() + " HTTP/1.1");
         System.out.println("Host: " + connectionURL.getHost() + ":" + 80);
         System.out.println("");
-
-        InputStream inputStream = connection.getInputStream();
         String[] res = head(inputStream);
         int contentLength = !res[0].equals("") ? Integer.valueOf(res[0]) : 0;
         byte[] bytes = new byte[contentLength];
-        inputStream.read(bytes,0,contentLength);
+        for(int i = 0;i< contentLength;i++){
+            Integer in = inputStream.read();
+            bytes[i] = in.byteValue();
+        }
         StringBuilder filePath = new StringBuilder("webpages/Client/");
         filePath.append(connectionURL.getHost());
 
@@ -361,6 +366,7 @@ public class ChatClient {
         try{
             this.connection = new Socket(connectionURL.getHost(), port);
             this.outputWtr = new PrintWriter(connection.getOutputStream());
+            this.inputStream = connection.getInputStream();
             System.out.println("Connected to: "+connectionURL.getHost()+"\n");
         } catch(Exception e){
             System.out.println(e);
@@ -368,7 +374,11 @@ public class ChatClient {
     }
 
 
-
+    /**
+     * this method returns url that are in the html file given
+     * @return
+     * @throws IOException
+     */
     private List<String> getLinks() throws IOException {
         List<String> list=  new ArrayList<>();
         Document doc = Jsoup.connect("https://" + connectionURL.getHost()).get();
@@ -376,17 +386,16 @@ public class ChatClient {
         for(Element src:media){
             if(src.tagName().equals("img")) {
                 String link = src.attr("abs:src");
-                if(!link.contains("consent")){
+                if(link.contains(".png")||link.contains(".jpeg")||link.contains(".jpg")){
                     list.add(link);
-
                 }
             }
         }
         return list;
     }
 
-
     private URL connectionURL;
     private Socket connection;
     private PrintWriter outputWtr;
+    private InputStream inputStream;
 }
