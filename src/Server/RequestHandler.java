@@ -2,7 +2,6 @@ package Server;
 
 import java.io.*;
 import java.net.Socket;
-import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -139,7 +138,7 @@ public class RequestHandler implements Runnable {
 
     public boolean head(String file, Map<String,String> options){
         //get the file
-        File newFile = new File("webpages/Server/localhost"+file);
+        File newFile = new File("./webpages/Server/localhost"+file);
         //build response
         StringBuilder response = new StringBuilder();
 
@@ -221,7 +220,7 @@ public class RequestHandler implements Runnable {
         try {
             // -- Retreive the text to be written
             int contentLength = Integer.valueOf(options.get("Content-length:").trim());
-            String text = retreiveText(contentLength);
+            String text = retrieveText(contentLength);
 
             // -- Create/overwrite the file
             File newFile = new File(dir, file);
@@ -253,7 +252,7 @@ public class RequestHandler implements Runnable {
      * @return  The contentLength characters that the client connected to this RequestHandler has sent,
      *          as one string.
      */
-    private String retreiveText(int contentLength) {
+    private String retrieveText(int contentLength) {
         try {
             char[] text = new char[contentLength];
             int i = inFromClient.read(text, 0, contentLength);

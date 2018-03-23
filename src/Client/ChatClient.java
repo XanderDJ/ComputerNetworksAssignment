@@ -5,12 +5,11 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.Socket;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -53,7 +52,6 @@ public class ChatClient {
             e.printStackTrace();
         }
         connect(port);
-
         if (command.equals("GET") || command.equals("HEAD"))
             fetch(command, port);
         else if (command.equals("PUT") || command.equals("POST"))
@@ -74,23 +72,38 @@ public class ChatClient {
 
 
     /**
-     * Parse the given url by cutting off the "http://" and "http://" parts and splitting them
-     * into:
-     * - a DNS adress, for example www.example.com
-     * - a File name/File location on the requested server, for example /index.html
+     * Prints the header of the response given by the server
      *
-     * @param url      The URL to be parsed.
-     * @return         An array containging the parsed URL with:
-     *                      result[0]: DNS-adress
-     *                      result[1]: File name/File location
+     * @param inputStream the response stream from the server
+     * @return An array of Strings| Strings[0] == Content-Length if content length didn't exist this will be an empty string
+     *                            | Strings[1] == Content-Type if content type didn't exist this will be an empty string
+     * @throws IOException
      */
-    private String[] parseURL(String url){
-        if( url.contains("https://")){
-            url = url.substring(8);
-        }else if (url.contains("http://")){
-            url = url.substring(7);
+    public String[] head(InputStream inputStream) throws IOException {
+        boolean headerRead=false;
+        StringBuilder header = new StringBuilder(""),line = new StringBuilder(""),contentLength =new StringBuilder(""),contentType =new StringBuilder(".");
+        while(!headerRead){
+            char nextChar = (char) (inputStream.read() & 0xFF);
+            line.append(nextChar);
+            if( line.toString().contains("\r\n")){
+                header.append(line);
+                if(line.toString().contains("Content-Length:")){
+                    contentLength.append(line.toString().trim().split(" ")[1]);
+                }
+                if(line.toString().contains("Content-Type: ")){
+                    contentType.append( line.toString().contains(";")? line.toString().split("/")[1].substring(0,4) :"." + line.toString().split("/")[1]);
+                }
+                line.delete(0,line.length());
+            }
+            if(header.toString().contains("\r\n\r\n")){
+                headerRead = true;
+            }
         }
-        return url.split("/", 2);
+        System.out.println(header);
+        String[] res = new String[2];
+        res[0] = contentLength.toString();
+        res[1] = contentType.toString();
+        return res;
     }
 
 
@@ -117,42 +130,28 @@ public class ChatClient {
             outputWtr.println("Host: "+ connectionURL.getHost()+":"+String.valueOf(port));
             outputWtr.println("");
             outputWtr.flush();
+            InputStream inputStream = connection.getInputStream();
 
             System.out.println(command+" " +connectionURL.getFile()+" HTTP/1.1");
             System.out.println("Host: "+ connectionURL.getHost()+":"+String.valueOf(port));
             System.out.println("");
 
-            // --- Receive the header
-            //StringBuilder header = new StringBuilder();
-            String line,contentType = ".html" ;
-            int contentLength = -1;
-            while ((line = inFromServer.readLine()) != null) {
-                System.out.println(line);
-                //header.append(line);
-                //header.append("\r\n");
-                line = line.toLowerCase();
-                if(line.contains("content-type: ")){
-                    contentType  = line.contains(";")? line.split("/")[1].substring(0,4) :"." + line.split("/")[1];
-                }
-                if (line.contains("content-length:")) {
-                    contentLength = Integer.valueOf(line.trim().split(" ")[1]);
-                }
-                 else if (line.length() == 0) {
-                    break;
-                }
-            }
-            if (contentLength == 0)
-                return;
-
+            // --- Receive the header results
+            String[] headerResults= head(inputStream);
+            int contentLength = !headerResults[0].equals("") ? Integer.valueOf(headerResults[0]):-1;
+            String contentType = headerResults[1];
             if (command.equals("GET")) {
                 String content;
                 if (contentLength >= 0) {
-                    content = readData(contentLength);
+                    content = readData(contentLength,inputStream);
                 } else
-                    content = readChunked();
-
+                    content = readChunked(inputStream);
                 saveFiles(content, contentType);
-               System.out.print(content);
+                List<String> imageURLs = getLinks();
+                for(String URL: imageURLs){
+                    getImage(URL);
+                }
+                System.out.print(content);
             }
         } catch (Exception e){
             e.printStackTrace();
@@ -170,14 +169,11 @@ public class ChatClient {
      * @return          A string read from the InputStream of the connection of this ChatClient.
      *                  OR an empty string if an exception occured.
      */
-    private String readData(int length) {
+    private String readData(int length,InputStream inputStream) {
         try {
-            char[] text = new char[length];
-
-            int i = inFromServer.read(text, 0, length);
-
-            return new String(text);
-
+            byte[] text = new byte[length];
+            inputStream.read(text, 0, length);
+            return new String(text,Charset.defaultCharset());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -190,26 +186,39 @@ public class ChatClient {
      *
      * Reads a server response with "Transfer-Encoding: Chunked" from the InputStream of the connection
      * of this ChatClient.
-     * This method will read all chunks comming in from the server until the server sends 0 as the next
+     * This method will read all chunks coming in from the server until the server sends 0 as the next
      * Chunk-length.
      *
      * @return A string that contains the full response from a server with Transfer-encoding: Chunked.
      */
-    private String readChunked(){
+    private String readChunked(InputStream inputStream){
         try {
-            StringBuilder response = new StringBuilder();
-            String lengthStr;
-            while ((lengthStr = inFromServer.readLine()) != null && !lengthStr.equals("0")){
-                if (lengthStr.length() == 0)
-                    continue;
-                //System.out.println(lengthStr);
-                //if(lengthStr.matches("-?[0-9a-fA-F]+"))
-                //response.append(readData(Integer.valueOf(lengthStr, 16) ));
-                //else{
-                    response.append(lengthStr);
-                //}
+            boolean endChunkReached = false;
+            StringBuilder line= new StringBuilder(""),content = new StringBuilder("");
+            while (!endChunkReached){
+                char nextChar = (char) (inputStream.read() & 0xFF);
+                line.append(nextChar);
+                //check if we are at the end chunk
+                if(line.toString().contains("0\r\n")){
+                    endChunkReached = true;
+                    byte[] b = new byte[2];
+                    inputStream.read(b,0,2);
+                }
+                //check if line is complete
+                else if(line.toString().contains("\r\n")){
+                    // check if line gives content length of next chunk
+                    if(line.toString().trim().matches("-?[0-9a-fA-F]+")){
+                        int contentLength = Integer.valueOf(line.toString().trim(),16);
+                        content.append(readData(contentLength+4,inputStream));
+                    }
+                    // if line == "\r\n"
+                    else{
+                        content.append(line);
+                    }
+                    line.delete(0,line.length());
+                }
             }
-            return response.toString();
+            return content.toString();
         } catch (IOException e){
             e.printStackTrace();
         }
@@ -232,12 +241,11 @@ public class ChatClient {
      */
     public void place(String command, int port){
         try{
-            // interative prompt from command line
+            // interactive prompt from command line
             Scanner inputScanner = new Scanner(System.in);
             // prompt user to give command
             System.out.println("Give the request for " + command + " command, close the prompt by typing \"exit\":");
-
-            // Retreive the text to send in the PUT request:
+            // Retrieve the text to send in the PUT request:
             StringBuilder file = new StringBuilder();
             while (inputScanner.hasNextLine()){
                 String line = inputScanner.nextLine();
@@ -249,7 +257,6 @@ public class ChatClient {
                 file.append(line);
                 file.append("\r\n");
             }
-
             // -- Find out the type of this document
             String type = "text/plain";
             String location = connectionURL.getPath();
@@ -259,7 +266,6 @@ public class ChatClient {
                 type = "image/jpeg";
             else if (location.contains(".png"))
                 type = "image/png";
-
             // ---Send the request
             outputWtr.println(command + " /" + connectionURL.getFile() + " /HTTP1.1");
             outputWtr.println("Host: "+connectionURL.getHost()+":"+String.valueOf(port));
@@ -268,55 +274,44 @@ public class ChatClient {
             outputWtr.println("");
             outputWtr.print(file);
             outputWtr.flush();
-
-            StringBuilder answer = new StringBuilder();
-            String line;
-            while((line = inFromServer.readLine()) != null){
-                answer.append(line);
-                answer.append("\r\n");
-                if (line.length() == 0)
-                    break;
-            }
-            System.out.println(answer);
+            InputStream inputStream = connection.getInputStream();
+            head(inputStream);
 
         }catch (Exception e){
             System.out.println(e);
         }
     }
 
-    private void imageGetter(String url) throws IOException {
-        OutputStream outputStream = connection.getOutputStream();
-        PrintWriter outputWriter = new PrintWriter(outputStream);
-        outputWriter.println("GET " + url + "HTTP/1.1");
-        outputWriter.println("Host: " + connectionURL.getHost() + ":" + connectionURL.getPort());
-        outputWriter.println("");
-        outputWriter.flush();
-        // Initialize the streams.
-        final FileOutputStream fileOutputStream = new FileOutputStream("C:\\Users\\Xander\\IdeaProjects\\ComputerNetworksAssignment\\webpages\\www.google.be\\images\\branding\\googlelogo\\1x\\googlelogo_white_background_color_272x92dp..png");
-        final InputStream inputStream = connection.getInputStream();
-        boolean headerRead=false;
-        String string = "",line = "";
-        int contentLength=0;
-        while(!headerRead){
-            char nextChar = (char) inputStream.read();
-            line += String.valueOf(nextChar);
-            if( line.contains("\r\n")){
-                string += line;
-                if(line.contains("Content-Length:")){
-                    contentLength = Integer.valueOf(line.trim().split(" ")[1]);
-                }
-                line ="";
-            }
-            if(string.contains("\r\n\r\n")){
-                headerRead = true;
-            }
+    private void getImage(String url) throws IOException {
+        this.connectionURL = new URL(url);
+        outputWtr.println("GET " + connectionURL.getPath() + " HTTP/1.1");
+        outputWtr.println("Host: " + connectionURL.getHost() + ":" + 80);
+        outputWtr.println("");
+        outputWtr.flush();
+        System.out.println("GET " + connectionURL.getPath() + " HTTP/1.1");
+        System.out.println("Host: " + connectionURL.getHost() + ":" + 80);
+        System.out.println("");
+
+        InputStream inputStream = connection.getInputStream();
+        String[] res = head(inputStream);
+        int contentLength = !res[0].equals("") ? Integer.valueOf(res[0]) : 0;
+        byte[] bytes = new byte[contentLength];
+        inputStream.read(bytes,0,contentLength);
+        StringBuilder filePath = new StringBuilder("webpages/Client/");
+        filePath.append(connectionURL.getHost());
+
+        String[] array = connectionURL.getPath().split("/");
+        for(int i = 0; i < array.length-1;i++) {
+            filePath.append("/");
+            filePath.append(array[i]);
         }
-        byte[] bytes =new byte[contentLength];
-        inputStream.read(bytes);
-        fileOutputStream.write(bytes, 0, contentLength);
-        inputStream.close();
-        fileOutputStream.close();
+        File dir = new File(filePath.toString());
+        dir.mkdirs();
+        FileOutputStream outputStream = new FileOutputStream(new File(dir,array[array.length-1]));
+        outputStream.write(bytes,0,contentLength);
+
     }
+
 
     /**
      * Saves the given "content" locally on this device under the name "path" in the webpages/Client/hostName
@@ -366,8 +361,6 @@ public class ChatClient {
         try{
             this.connection = new Socket(connectionURL.getHost(), port);
             this.outputWtr = new PrintWriter(connection.getOutputStream());
-            this.inFromServer = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-
             System.out.println("Connected to: "+connectionURL.getHost()+"\n");
         } catch(Exception e){
             System.out.println(e);
@@ -376,38 +369,24 @@ public class ChatClient {
 
 
 
-    private List<String> getLinks(String url) throws IOException {
+    private List<String> getLinks() throws IOException {
         List<String> list=  new ArrayList<>();
-        Document doc = Jsoup.connect(url).get();
-        Elements links = doc.select("a[href]");
+        Document doc = Jsoup.connect("https://" + connectionURL.getHost()).get();
         Elements media = doc.select("[src]");
-        Elements imports = doc.select("link[href]");
         for(Element src:media){
             if(src.tagName().equals("img")) {
                 String link = src.attr("abs:src");
-                list.add(link);
+                if(!link.contains("consent")){
+                    list.add(link);
+
+                }
             }
         }
         return list;
     }
 
-    private void updateImageLinkInFile(File file, String oldLink, String newLink) throws IOException {
-        FileReader reader = new FileReader(file);
-        BufferedReader bufferedReader = new BufferedReader(reader);
-        Iterator<String> iterator = bufferedReader.lines().iterator();
-        String fileString= "";
-        while(iterator.hasNext()){
-            fileString += iterator.next() + "\r\n";
-        }
-        fileString = fileString.replace(oldLink,newLink);
-        FileWriter writer = new FileWriter(file);
-        writer.write(fileString);
-        writer.flush();
-        writer.close();
-    }
 
     private URL connectionURL;
     private Socket connection;
     private PrintWriter outputWtr;
-    private BufferedReader inFromServer;
 }
